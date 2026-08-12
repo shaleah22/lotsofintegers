@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Signed Integer Drill</title>
+<style>
+    :root {
+        --tile: clamp(30px, 4.4vw, 72px);
+        --ink: #1a1a1a;
+        --line: #333;
+        --gap: clamp(10px, 1.6vw, 34px);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+        height: 100%;
+        margin: 0;
+    }
+
+    body {
+        font-family: Tahoma, Geneva, Verdana, sans-serif;
+        background: #fff;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: clamp(4px, 0.8vh, 12px) clamp(6px, 1vw, 20px);
+        gap: clamp(4px, 0.7vh, 10px);
+        overflow-y: auto;
+    }
+
+    /* Container spans full available screen width */
+    .drill-container {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        gap: clamp(4px, 0.7vh, 10px);
+        flex: 0 0 auto;
+    }
+
+    /* ---------- top bar ---------- */
+    .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        flex: 0 0 auto;
+    }
+
+    .topbar span.label {
+        font-size: clamp(12px, 1.1vw, 18px);
+        font-weight: bold;
+        color: #555;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .new-btn {
+        font-family: inherit;
+        font-size: clamp(12px, 1.1vw, 18px);
+        font-weight: bold;
+        padding: 5px 16px;
+        border: 2px solid #999;
+        background: #fff;
+        color: #555;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+
+    .instruction-banner {
+        flex: 0 0 auto;
+        text-align: center;
+        font-size: clamp(11px, 1.05vw, 18px);
+        color: #666;
+        font-style: italic;
+    }
+
+    /* ---------- the problem = the draggable tiles ---------- */
+    .pool-container {
+        --fit: var(--tile);
+        flex: 0 0 auto;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-wrap: nowrap;
+        white-space: nowrap;
+        gap: clamp(6px, 1.2vw, 18px);
+        padding: clamp(4px, 0.9vh, 12px) 6px;
+        min-height: calc(var(--tile) * 1.4);
+        max-height: 25vh;
+        overflow: hidden;
+        border-radius: 8px;
+        width: 100%;
+    }
+
+    .pool-container .draggable-item { font-size: var(--fit); }
+
+    .pool-container.drag-over {
+        background: #f1f5f9;
+    }
+
+    .draggable-item {
+        font-family: Tahoma, Geneva, Verdana, sans-serif;
+        font-size: var(--tile);
+        font-weight: bold;
+        line-height: 1.05;
+        color: var(--ink);
+        background: none;
+        border: none;
+        border-bottom: 4px solid transparent;
+        padding: 0 4px;
+        white-space: nowrap;
+        cursor: grab;
+        user-select: none;
+        transition: color 0.15s, transform 0.15s, opacity 0.3s, border-color 0.15s;
+    }
+
+    .draggable-item:hover { color: #0056b3; }
+    .draggable-item:active { cursor: grabbing; transform: scale(0.95); }
+
+    .draggable-item.selected-for-cancel {
+        color: #e07b00;
+        border-bottom-color: #e07b00;
+        transform: scale(1.12);
+    }
+
+    /* signs get breathing room from the digits */
+    .sgn {
+        display: inline-block;
+        margin-right: 0.22em;
+    }
+
+    .draggable-item.cancelled {
+        opacity: 0.18;
+        text-decoration: line-through;
+        pointer-events: none;
+    }
+
+    @keyframes simplify-pop {
+        0%   { transform: scale(1);    color: #28a745; }
+        45%  { transform: scale(1.25); color: #28a745; }
+        100% { transform: scale(1);    color: var(--ink); }
+    }
+
+    .draggable-item.just-simplified {
+        animation: simplify-pop 0.5s ease;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .draggable-item.just-simplified { animation: none; }
+    }
+
+    /* ---------- board: + column | - column, totals beneath, net strip ---------- */
+    .board {
+        width: 100%;
+        flex: 1 1 auto;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: auto 1fr auto auto;
+        border: 3px solid var(--line);
+        border-radius: 6px;
+        overflow: hidden;
+    }
+
+    .board-header {
+        background: var(--line);
+        color: #fff;
+        padding: 2px 0;
+        font-size: clamp(20px, 2.6vw, 46px);
+        font-weight: bold;
+        text-align: center;
+        line-height: 1.1;
+    }
+
+    /* tiles stacked vertically, one per line, auto-sized so every one is visible */
+    .chart-column {
+        --fit: var(--tile);
+        min-height: 120px;
+        overflow: hidden;
+        padding: clamp(4px, 1vh, 14px) clamp(4px, 0.6vw, 12px);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: calc(var(--fit) * 0.18);
+        border-right: 3px solid var(--line);
+        border-bottom: 3px solid var(--line);
+        background: #fff;
+    }
+
+    .chart-column .draggable-item { font-size: var(--fit); }
+
+    .chart-column.drag-over { background-color: #e6f2ff; }
+
+    .total-cell {
+        padding: clamp(3px, 0.7vh, 10px) 6px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        border-right: 3px solid var(--line);
+        background: #f8f9fa;
+    }
+
+    .board-header:last-of-type { border-right: none; }
+
+    .total-cell:last-of-type { border-right: none; }
+
+    .net-cell {
+        grid-column: 1 / -1;
+        border-top: 3px solid var(--line);
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: center;
+        gap: clamp(8px, 1.4vw, 24px);
+        padding: clamp(3px, 0.7vh, 10px) 6px;
+        background: #f1f3f5;
+    }
+
+    .net-cell label { margin-bottom: 0; }
+
+    .board label {
+        font-size: clamp(11px, 1.1vw, 20px);
+        font-weight: bold;
+        margin-bottom: 4px;
+        color: #555;
+        letter-spacing: 0.5px;
+    }
+
+    .board input {
+        width: clamp(90px, 12vw, 220px);
+        padding: 2px 6px;
+        font-size: clamp(20px, 2.4vw, 42px);
+        text-align: center;
+        border: 3px solid #ccc;
+        border-radius: 4px;
+        font-weight: bold;
+        font-family: inherit;
+        background: #fff;
+    }
+
+    .net-cell input {
+        font-size: clamp(24px, 3vw, 54px);
+        border-color: #999;
+    }
+
+    .board input:focus {
+        outline: none;
+        border-color: #007bff;
+        box-shadow: 0 0 6px rgba(0,123,255,0.35);
+    }
+
+    .feedback {
+        flex: 0 0 auto;
+        text-align: center;
+        font-weight: bold;
+        font-size: clamp(14px, 1.5vw, 26px);
+        white-space: pre-line;
+        min-height: 1.4em;
+    }
+
+    /* ---------- progress tracker ---------- */
+    .tracker {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: clamp(6px, 0.9vw, 14px);
+        padding: clamp(4px, 0.8vh, 10px) 10px;
+        border-top: 2px solid #ddd;
+    }
+
+    .tracker-label {
+        font-size: clamp(11px, 1vw, 17px);
+        font-weight: bold;
+        color: #555;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .dots {
+        display: flex;
+        align-items: center;
+        gap: clamp(4px, 0.5vw, 9px);
+    }
+
+    .dot {
+        width: clamp(13px, 1.5vw, 22px);
+        height: clamp(13px, 1.5vw, 22px);
+        border-radius: 50%;
+        border: 2px solid #bbb;
+        background: #fff;
+        transition: background 0.25s, border-color 0.25s, transform 0.25s;
+    }
+
+    .dot.filled {
+        background: #28a745;
+        border-color: #1e7e34;
+        transform: scale(1.1);
+    }
+
+    .tracker-count {
+        font-size: clamp(11px, 1.05vw, 18px);
+        font-weight: bold;
+        color: #555;
+    }
+
+    .tracker.goal-met .tracker-count { color: #1e7e34; }
+
+    .tracker.goal-met .tracker-label { color: #1e7e34; }
+
+    .bonus {
+        font-size: clamp(11px, 1.05vw, 18px);
+        font-weight: bold;
+        color: #1e7e34;
+        background: #e8f6ec;
+        border: 2px solid #28a745;
+        border-radius: 999px;
+        padding: 1px 9px;
+    }
+
+    .reset-btn {
+        font-family: inherit;
+        font-size: clamp(10px, 0.9vw, 15px);
+        font-weight: bold;
+        padding: 3px 12px;
+        border: 2px solid #ccc;
+        background: #fff;
+        color: #777;
+        border-radius: 6px;
+        cursor: pointer;
+    }
+
+    .reset-btn:hover { border-color: #999; color: #555; }
+
+    /* ---------- submission panel (below all components) ---------- */
+    .submit-panel {
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        margin-top: 10px;
+        margin-bottom: 20px;
+        padding: 12px;
+        background: #f8fafc;
+        border: 2px dashed #059669;
+        border-radius: 8px;
+        width: 100%;
+        max-width: 480px;
+        flex: 0 0 auto;
+    }
+
+    .submit-panel input {
+        width: 100%;
+        padding: 6px 12px;
+        font-size: clamp(14px, 1.2vw, 18px);
+        border: 2px solid #cbd5e1;
+        border-radius: 6px;
+        text-align: center;
+    }
+
+    .submit-homework-btn {
+        background-color: #059669;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        font-size: clamp(13px, 1.1vw, 16px);
+        font-weight: bold;
+        border-radius: 6px;
+        cursor: pointer;
+        width: 100%;
+        transition: background-color 0.2s;
+    }
+
+    .submit-homework-btn:hover {
+        background-color: #047857;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .dot { transition: none; }
+    }
+</style>
+</head>
+<body>
+
+<div class="drill-container">
+    <div class="topbar">
+        <button class="new-btn" onclick="renderProblem()">New problem</button>
+    </div>
+
+    <div class="instruction-banner">Step 1: Click a double sign to simplify it — <b>- (-5)</b> becomes <b>+5</b>, <b>+ (-2)</b> becomes <b>-2</b>. Step 2: Click opposite pairs to cancel them out. Step 3: Drag what's left into the +/- columns.</div>
+
+    <!-- The problem itself: these tiles ARE the equation -->
+    <div class="pool-container" id="pool" ondragover="allowDrop(event)" ondragleave="removeDropStyle(event)" ondrop="dropToPool(event)"></div>
+
+    <!-- Board: + column and - column, each with its own total underneath; FINAL ANSWER across the bottom -->
+    <div class="board">
+        <div class="board-header">+</div>
+        <div class="board-header">-</div>
+
+        <div class="chart-column" id="col-plus" ondragover="allowDrop(event)" ondragleave="removeDropStyle(event)" ondrop="dropToColumn(event, 'plus')"></div>
+        <div class="chart-column" id="col-minus" ondragover="allowDrop(event)" ondragleave="removeDropStyle(event)" ondrop="dropToColumn(event, 'minus')"></div>
+
+        <div class="total-cell">
+            <label>TOTAL +</label>
+            <input type="text" id="input-total-plus" placeholder="?" oninput="checkTotalPlusInput()">
+        </div>
+        <div class="total-cell">
+            <label>TOTAL -</label>
+            <input type="text" id="input-total-minus" placeholder="?" oninput="checkTotalMinusInput()">
+        </div>
+
+        <div class="net-cell">
+            <label>FINAL ANSWER</label>
+            <input type="text" id="input-net" placeholder="?" oninput="checkFinalAnswer()" onkeydown="handleNetKeyDown(event)">
+        </div>
+    </div>
+
+    <div class="feedback" id="feedback"></div>
+
+    <!-- Progress tracker -->
+    <div class="tracker" id="tracker">
+        <span class="tracker-label">Problems finished</span>
+        <div class="dots" id="tracker-dots"></div>
+        <span class="tracker-count" id="tracker-count">0 of 5</span>
+        <button class="reset-btn" onclick="resetProgress()">Start over</button>
+    </div>
+</div>
+
+<!-- Google Form Submit Panel: Positioned underneath everything -->
+<div id="submitPanel" class="submit-panel">
+    <p style="color: #059669; font-weight: 800; margin: 0;">🎉 DRILL COMPLETE!</p>
+    <p style="color: #991b1b; font-size: 0.85rem; margin: 0; text-align: center;">
+        Click <b>SUBMIT TWICE</b>: First below, then on the Google Form!
+    </p>
+    <input type="text" id="studentNameInput" placeholder="Your Full Name" />
+    <button class="submit-homework-btn" onclick="submitScoreToTeacher()">
+        1️⃣ CLICK HERE FIRST TO SUBMIT ➔
+    </button>
+</div>
+
+<script>
+    // ==========================================
+    // TEACHER CONFIGURATION
+    // ==========================================
+    const GOOGLE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSe4_Gnrq1zyrttA3lSgrVBtMkaVaoMim31ByzoH-orxmfDB2A/viewform";
+    const ENTRY_NAME_ID = "entry.1899284808"; 
+    const ENTRY_SCORE_ID = "entry.1974610095"; 
+    // ==========================================
+
+    let currentProblem = {};
+    let firstSelectedCancelItem = null;
+    let isCompleted = false;
+    let hasSubmitted = false;     // tracks if score was submitted
+    const termCount = 8;          // every problem has 8 numbers
+    let dragInProgress = false;
+
+    // Progress tracker
+    const REQUIRED = 5;           // how many are required
+    let completedCount = 0;       // students can keep going past the requirement
+
+    function baseTileSize() {
+        return Math.min(72, Math.max(30, window.innerWidth * 0.044));
+    }
+
+    function fitContainer(el, minSize) {
+        if (!el || el.children.length === 0) {
+            el.style.setProperty('--fit', baseTileSize() + 'px');
+            return;
+        }
+        let size = baseTileSize();
+        el.style.setProperty('--fit', size + 'px');
+
+        let guard = 0;
+        while (guard++ < 80 && size > minSize &&
+               (el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1)) {
+            size = Math.max(minSize, size - 1.5);
+            el.style.setProperty('--fit', size + 'px');
+        }
+    }
+
+    function fitAll() {
+        fitContainer(document.getElementById('pool'), 14);
+        fitContainer(document.getElementById('col-plus'), 14);
+        fitContainer(document.getElementById('col-minus'), 14);
+    }
+
+    window.addEventListener('resize', fitAll);
+
+    function updateTracker() {
+        const tracker = document.getElementById('tracker');
+        const dots = document.getElementById('tracker-dots');
+        const countEl = document.getElementById('tracker-count');
+        const submitPanel = document.getElementById('submitPanel');
+
+        dots.innerHTML = '';
+        for (let i = 0; i < REQUIRED; i++) {
+            let d = document.createElement('span');
+            d.className = 'dot' + (i < completedCount ? ' filled' : '');
+            dots.appendChild(d);
+        }
+
+        let extra = completedCount - REQUIRED;
+        if (extra > 0) {
+            let badge = document.createElement('span');
+            badge.className = 'bonus';
+            badge.innerText = '+' + extra;
+            dots.appendChild(badge);
+        }
+
+        if (completedCount < REQUIRED) {
+            countEl.innerText = completedCount + ' of ' + REQUIRED;
+            tracker.classList.remove('goal-met');
+            submitPanel.style.display = 'none';
+        } else {
+            countEl.innerText = completedCount === REQUIRED 
+                ? '5 of 5 — goal reached!' 
+                : completedCount + ' finished — ' + extra + ' past the goal!';
+            tracker.classList.add('goal-met');
+            
+            // Show submit panel only if requirement is met and student hasn't submitted yet
+            submitPanel.style.display = hasSubmitted ? 'none' : 'flex';
+        }
+    }
+
+    function submitScoreToTeacher() {
+        const studentNameInput = document.getElementById('studentNameInput');
+        const studentName = studentNameInput.value.trim();
+        if (!studentName) {
+            alert("Please enter your name before submitting your score!");
+            studentNameInput.focus();
+            return;
+        }
+
+        const formUrl = `${GOOGLE_FORM_URL}?${ENTRY_NAME_ID}=${encodeURIComponent(studentName)}&${ENTRY_SCORE_ID}=${encodeURIComponent(completedCount)}`;
+        window.open(formUrl, '_blank');
+
+        // Hide panel after submitting
+        hasSubmitted = true;
+        document.getElementById('submitPanel').style.display = 'none';
+    }
+
+    function resetProgress() {
+        completedCount = 0;
+        hasSubmitted = false;
+        updateTracker();
+        renderProblem();
+    }
+
+    function magnitudeBag(count) {
+        let bag = shuffle([2, 3, 4, 5, 6, 7, 8, 9]).slice(0, count);
+
+        if (bag.length > 0 && Math.random() < 0.55) {
+            bag[Math.floor(Math.random() * bag.length)] = 10;
+        }
+        if (bag.length > 1 && Math.random() < 0.35) {
+            let i, guard = 0;
+            do { i = Math.floor(Math.random() * bag.length); } while (bag[i] === 10 && guard++ < 20);
+            if (bag[i] !== 10) bag[i] = 20;
+        }
+        return shuffle(bag);
+    }
+
+    function poolValueOf(item) {
+        return item.type === 'doubleNeg' ? Math.abs(item.val) : item.val;
+    }
+
+    function shuffle(arr) {
+        for (let i = arr.length - 1; i > 0; i--) {
+            let j = Math.floor(Math.random() * (i + 1));
+            let temp = arr[i];
+            arr[i] = arr[j];
+            arr[j] = temp;
+        }
+        return arr;
+    }
+
+    function buildTerm(form, id, a) {
+        switch (form) {
+            case 'pos':
+                return { id: id, val: a, display: `+${a}`, targetCol: 'plus', type: 'normal' };
+            case 'neg':
+                return { id: id, val: -a, display: `-${a}`, targetCol: 'minus', type: 'normal' };
+            case 'plusNegBare':
+                return {
+                    id: id, val: -a, display: `+ -${a}`, targetCol: 'minus', type: 'plusMinus',
+                    resolvedPlusDisplay: `+${a}`, resolvedMinusDisplay: `-${a}`
+                };
+            case 'plusNegParen':
+                return {
+                    id: id, val: -a, display: `+ (-${a})`, targetCol: 'minus', type: 'plusMinus',
+                    resolvedPlusDisplay: `+${a}`, resolvedMinusDisplay: `-${a}`
+                };
+            case 'minusNegBare':
+            case 'minusNegParen':
+            default:
+                return {
+                    id: id, val: a, display: `- (-${a})`, targetCol: 'plus', type: 'doubleNeg',
+                    resolvedDisplay: `+${a}`
+                };
+        }
+    }
+
+    function setLeadDisplay(item) {
+        item.display = item.val >= 0 ? `${item.val}` : `-${Math.abs(item.val)}`;
+    }
+
+    function spreadOutOpposites(terms) {
+        if (terms.length < 3) return terms;
+
+        let head = terms[0];
+        let tail = terms.slice(1);
+
+        for (let attempt = 0; attempt < 400; attempt++) {
+            shuffle(tail);
+            let arranged = [head, ...tail];
+            let ok = true;
+            for (let i = 0; i < arranged.length - 1; i++) {
+                if (poolValueOf(arranged[i]) + poolValueOf(arranged[i + 1]) === 0) { ok = false; break; }
+            }
+            if (ok) return arranged;
+        }
+
+        let remaining = tail.slice();
+        let ordered = [head];
+        while (remaining.length) {
+            let idx = remaining.findIndex(t =>
+                poolValueOf(ordered[ordered.length - 1]) + poolValueOf(t) !== 0
+            );
+            if (idx === -1) idx = 0;
+            ordered.push(remaining.splice(idx, 1)[0]);
+        }
+        return ordered;
+    }
+
+    function signOfForm(form) {
+        return (form === 'neg' || form.indexOf('plusNeg') === 0) ? -1 : 1;
+    }
+
+    function generateProblem() {
+        let numTerms = termCount;
+        let forcePositiveNet = Math.random() < 0.5;
+
+        let forms = [Math.random() < 0.5 ? 'pos' : 'neg'];
+        let deck = shuffle([
+            'pos', 'neg', 'pos', 'neg',
+            'plusNegBare', 'plusNegParen',
+            'minusNegParen', 'minusNegParen'
+        ]);
+        for (let i = 1; i < numTerms; i++) {
+            if (deck.length === 0) {
+                deck = shuffle(['pos', 'neg', 'plusNegBare', 'plusNegParen', 'minusNegParen', 'minusNegParen']);
+            }
+            forms.push(deck.shift());
+        }
+
+        let wantPairs = numTerms >= 7
+            ? (Math.random() < 0.35 ? 2 : 1)
+            : (Math.random() < 0.8 ? 1 : 0);
+
+        let plusSlots  = shuffle(forms.map((f, i) => i).filter(i => signOfForm(forms[i]) === 1));
+        let minusSlots = shuffle(forms.map((f, i) => i).filter(i => signOfForm(forms[i]) === -1));
+
+        let pairs = [];
+        while (pairs.length < wantPairs && plusSlots.length && minusSlots.length) {
+            pairs.push([plusSlots.pop(), minusSlots.pop()]);
+        }
+
+        let bag = magnitudeBag(numTerms - pairs.length);
+        let mags = new Array(numTerms).fill(null);
+        pairs.forEach(pair => {
+            let m = bag.shift();
+            mags[pair[0]] = m;
+            mags[pair[1]] = m;
+        });
+        for (let i = 0; i < numTerms; i++) {
+            if (mags[i] === null) mags[i] = bag.shift();
+        }
+
+        let terms = forms.map((f, i) => buildTerm(f, `item_${i}`, mags[i]));
+
+        let paired = new Set();
+        pairs.forEach(pair => { paired.add(pair[0]); paired.add(pair[1]); });
+
+        let currentNet = terms.reduce((acc, item) => acc + poolValueOf(item), 0);
+
+        if ((forcePositiveNet && currentNet <= 0) || (!forcePositiveNet && currentNet >= 0)) {
+            let candidate = terms.find((item, i) =>
+                item.type === 'normal' && !paired.has(i) &&
+                (forcePositiveNet ? item.val < 0 : item.val > 0)
+            );
+            if (candidate) {
+                if (forcePositiveNet) {
+                    candidate.val = Math.abs(candidate.val);
+                    candidate.targetCol = 'plus';
+                    candidate.display = `+${candidate.val}`;
+                } else {
+                    candidate.val = -Math.abs(candidate.val);
+                    candidate.targetCol = 'minus';
+                    candidate.display = `-${Math.abs(candidate.val)}`;
+                }
+            }
+        }
+
+        terms = spreadOutOpposites(terms);
+        setLeadDisplay(terms[0]);
+
+        currentProblem = { items: terms, net: 0 };
+    }
+
+    function getColumnSum(columnId) {
+        const col = document.getElementById(columnId);
+        let items = Array.from(col.children).filter(el => !el.classList.contains('cancelled'));
+        let sum = 0;
+        items.forEach(item => {
+            sum += Math.abs(getNumericalValue(item));
+        });
+        return sum;
+    }
+
+    function renderProblem() {
+        isCompleted = false;
+        generateProblem();
+        firstSelectedCancelItem = null;
+
+        document.getElementById('feedback').innerText = '';
+        document.getElementById('feedback').style.color = '#333';
+
+        document.getElementById('input-total-plus').value = '';
+        document.getElementById('input-total-minus').value = '';
+        document.getElementById('input-net').value = '';
+
+        document.getElementById('col-plus').innerHTML = '';
+        document.getElementById('col-minus').innerHTML = '';
+
+        const pool = document.getElementById('pool');
+        pool.innerHTML = '';
+
+        currentProblem.items.forEach(item => {
+            let div = document.createElement('div');
+            div.className = 'draggable-item';
+            div.id = item.id;
+            div.draggable = true;
+
+            div.addEventListener('dragstart', drag);
+            div.addEventListener('dragend', function() { dragInProgress = false; });
+            div.addEventListener('pointerdown', function() { dragInProgress = false; });
+            div.addEventListener('pointerup', handleItemPointerUp);
+
+            item.simplified = false;
+            div.setAttribute('data-target', item.targetCol);
+            div.setAttribute('data-type', item.type);
+            div.innerHTML = fmt(item.display);
+            pool.appendChild(div);
+        });
+
+        fitAll();
+        updateCancellationCues();
+    }
+
+    function allowDrop(ev) {
+        ev.preventDefault();
+        ev.currentTarget.classList.add('drag-over');
+    }
+
+    function removeDropStyle(ev) {
+        ev.currentTarget.classList.remove('drag-over');
+    }
+
+    function drag(ev) {
+        dragInProgress = true;
+        ev.dataTransfer.setData("text", ev.target.id);
+    }
+
+    function dropToColumn(ev, columnType) {
+        ev.preventDefault();
+        ev.currentTarget.classList.remove('drag-over');
+        var data = ev.dataTransfer.getData("text");
+        var element = document.getElementById(data);
+        if (!element) return;
+
+        let type = element.getAttribute('data-type');
+        let targetItem = currentProblem.items.find(i => i.id === data);
+
+        if (targetItem.targetCol !== columnType) {
+            let feedback = document.getElementById('feedback');
+            feedback.style.color = '#dc3545';
+
+            if (type === 'doubleNeg') {
+                feedback.innerText = "❌ Double negatives belong in the + column!";
+            } else if (type === 'plusMinus') {
+                feedback.innerText = "❌ Adding a negative belongs in the - column!";
+            } else if (targetItem.val < 0) {
+                feedback.innerText = "❌ Negative numbers belong in the - column!";
+            } else {
+                feedback.innerText = "❌ Positive numbers belong in the + column!";
+            }
+            return;
+        }
+
+        let feedback = document.getElementById('feedback');
+        if (feedback.innerText.includes("❌")) {
+            feedback.innerText = "";
+        }
+
+        if (type === 'doubleNeg') {
+            element.innerHTML = fmt(columnType === 'plus' ? targetItem.resolvedDisplay : targetItem.display);
+        } else if (type === 'plusMinus') {
+            if (columnType === 'plus') {
+                element.innerHTML = fmt(targetItem.resolvedPlusDisplay);
+            } else if (columnType === 'minus') {
+                element.innerHTML = fmt(targetItem.resolvedMinusDisplay);
+            }
+        }
+
+        ev.currentTarget.appendChild(element);
+        fitAll();
+        updateCancellationCues();
+        checkPlacementCompletion();
+    }
+
+    function dropToPool(ev) {
+        ev.preventDefault();
+        ev.currentTarget.classList.remove('drag-over');
+        var data = ev.dataTransfer.getData("text");
+        var element = document.getElementById(data);
+        if (!element) return;
+
+        let type = element.getAttribute('data-type');
+        let targetItem = currentProblem.items.find(i => i.id === data);
+
+        if (type === 'doubleNeg' || type === 'plusMinus') {
+            element.innerHTML = fmt(displayFor(targetItem));
+        }
+
+        ev.currentTarget.appendChild(element);
+
+        if (element === firstSelectedCancelItem) {
+            firstSelectedCancelItem.classList.remove('selected-for-cancel');
+            firstSelectedCancelItem = null;
+        }
+        fitAll();
+        updateCancellationCues();
+        checkPlacementCompletion();
+    }
+
+    function getNumericalValue(element) {
+        let type = element.getAttribute('data-type');
+        let targetItem = currentProblem.items.find(i => i.id === element.id);
+        let parentId = element.parentElement ? element.parentElement.id : '';
+
+        if (parentId === 'pool') {
+            if (type === 'doubleNeg') return Math.abs(targetItem.val);
+            return targetItem.val;
+        }
+
+        if (type === 'doubleNeg' || type === 'plusMinus') {
+            return parentId === 'col-plus' ? Math.abs(targetItem.val) : -Math.abs(targetItem.val);
+        }
+
+        return targetItem.val;
+    }
+
+    function fmt(str) {
+        let out = '';
+        for (const ch of String(str)) {
+            if (ch === ' ') continue;
+            if (ch === '+' || ch === '-') out += `<span class="sgn">${ch}</span>`;
+            else out += ch;
+        }
+        return out;
+    }
+
+    function displayFor(item) {
+        if (!item.simplified) return item.display;
+        if (item.type === 'doubleNeg') return item.resolvedDisplay;
+        if (item.type === 'plusMinus') return item.resolvedMinusDisplay;
+        return item.display;
+    }
+
+    function simplifyItem(element, item) {
+        item.simplified = true;
+        element.innerHTML = fmt(displayFor(item));
+
+        element.classList.remove('just-simplified');
+        void element.offsetWidth;
+        element.classList.add('just-simplified');
+        setTimeout(() => element.classList.remove('just-simplified'), 550);
+
+        let feedback = document.getElementById('feedback');
+        feedback.style.color = '#28a745';
+        feedback.innerText = item.type === 'doubleNeg'
+            ? "✔ Two negatives in a row make a positive!"
+            : "✔ Adding a negative is the same as subtracting.";
+
+        fitAll();
+    }
+
+    function handleItemPointerUp(ev) {
+        ev.stopPropagation();
+        if (dragInProgress) { dragInProgress = false; return; }
+
+        let item = ev.currentTarget;
+        if (item.classList.contains('cancelled')) return;
+
+        let feedback = document.getElementById('feedback');
+        let data = currentProblem.items.find(i => i.id === item.id);
+        let inPool = item.parentElement && item.parentElement.id === 'pool';
+        let isDoubleSign = (data.type === 'doubleNeg' || data.type === 'plusMinus');
+
+        if (inPool && isDoubleSign && !data.simplified) {
+            if (firstSelectedCancelItem === item) {
+                item.classList.remove('selected-for-cancel');
+                firstSelectedCancelItem = null;
+            }
+            simplifyItem(item, data);
+            return;
+        }
+
+        if (!firstSelectedCancelItem) {
+            firstSelectedCancelItem = item;
+            item.classList.add('selected-for-cancel');
+            feedback.style.color = '#007bff';
+            feedback.innerText = "Selected! Now click its opposite partner to cancel them out.";
+        } else if (firstSelectedCancelItem === item) {
+            item.classList.remove('selected-for-cancel');
+            firstSelectedCancelItem = null;
+            feedback.innerText = "";
+            updateCancellationCues();
+        } else {
+            let val1 = getNumericalValue(firstSelectedCancelItem);
+            let val2 = getNumericalValue(item);
+
+            let bothInPool = (firstSelectedCancelItem.parentElement.id === 'pool' && item.parentElement.id === 'pool');
+            let diffCols = (firstSelectedCancelItem.parentElement.id !== item.parentElement.id && firstSelectedCancelItem.parentElement.id !== 'pool' && item.parentElement.id !== 'pool');
+
+            if ((bothInPool || diffCols) && (val1 + val2 === 0)) {
+                let item1 = firstSelectedCancelItem;
+                let item2 = item;
+
+                item1.classList.remove('selected-for-cancel');
+                item1.classList.add('cancelled');
+                item2.classList.add('cancelled');
+
+                firstSelectedCancelItem = null;
+                feedback.style.color = '#28a745';
+                feedback.innerText = "✨ Great job! Opposite pair cancelled out.";
+
+                updateCancellationCues();
+                checkPlacementCompletion();
+            } else {
+                firstSelectedCancelItem.classList.remove('selected-for-cancel');
+                firstSelectedCancelItem = item;
+                item.classList.add('selected-for-cancel');
+
+                feedback.style.color = '#dc3545';
+                feedback.innerText = "Those don't form an opposite pair! Selected this new item instead.";
+            }
+        }
+    }
+
+    function updateCancellationCues() {
+        const pool = document.getElementById('pool');
+        const plusCol = document.getElementById('col-plus');
+        const minusCol = document.getElementById('col-minus');
+
+        let poolItems = Array.from(pool.children).filter(el => !el.classList.contains('cancelled'));
+        let plusItems = Array.from(plusCol.children).filter(el => !el.classList.contains('cancelled'));
+        let minusItems = Array.from(minusCol.children).filter(el => !el.classList.contains('cancelled'));
+
+        let allActive = [...poolItems, ...plusItems, ...minusItems];
+        let hasPair = false;
+
+        for (let i = 0; i < allActive.length; i++) {
+            for (let j = i + 1; j < allActive.length; j++) {
+                let itemA = allActive[i];
+                let itemB = allActive[j];
+                let vA = getNumericalValue(itemA);
+                let vB = getNumericalValue(itemB);
+
+                let bothInPool = (itemA.parentElement.id === 'pool' && itemB.parentElement.id === 'pool');
+                let diffCols = (itemA.parentElement.id !== itemB.parentElement.id && itemA.parentElement.id !== 'pool' && itemB.parentElement.id !== 'pool');
+
+                if ((bothInPool || diffCols) && (vA + vB === 0)) {
+                    hasPair = true;
+                    break;
+                }
+            }
+            if (hasPair) break;
+        }
+
+        const feedback = document.getElementById('feedback');
+        if (firstSelectedCancelItem) return;
+
+        if (hasPair) {
+            feedback.style.color = '#6c757d';
+            feedback.innerText = "💡 Hint: Opposite pairs are available! Click them to cancel out.";
+        } else {
+            if (feedback.innerText.includes("Hint")) {
+                feedback.innerText = "";
+            }
+        }
+    }
+
+    function checkPlacementCompletion() {
+        const pool = document.getElementById('pool');
+        let uncancelledPool = Array.from(pool.children).filter(el => !el.classList.contains('cancelled'));
+
+        if (uncancelledPool.length === 0) {
+            let plusInput = document.getElementById('input-total-plus');
+            if (document.activeElement !== plusInput && document.activeElement !== document.getElementById('input-total-minus') && document.activeElement !== document.getElementById('input-net')) {
+                plusInput.focus();
+            }
+        }
+    }
+
+    function checkTotalPlusInput() {
+        let inputEl = document.getElementById('input-total-plus');
+        let val = parseInt(inputEl.value.trim(), 10);
+        let expectedPlus = getColumnSum('col-plus');
+        if (!isNaN(val) && val === expectedPlus) {
+            document.getElementById('input-total-minus').focus();
+        }
+    }
+
+    function checkTotalMinusInput() {
+        let inputEl = document.getElementById('input-total-minus');
+        let val = parseInt(inputEl.value.trim(), 10);
+        let expectedMinus = -Math.abs(getColumnSum('col-minus'));
+        if (!isNaN(val) && val === expectedMinus) {
+            document.getElementById('input-net').focus();
+        }
+    }
+
+    function checkFinalAnswer() {
+        let netInput = document.getElementById('input-net');
+        let val = parseInt(netInput.value.trim(), 10);
+        let expectedPlus = getColumnSum('col-plus');
+        let expectedMinus = getColumnSum('col-minus');
+        let expectedNet = expectedPlus - expectedMinus;
+
+        if (!isNaN(val) && val === expectedNet && !isCompleted) {
+            isCompleted = true;
+            completedCount++;
+            updateTracker();
+
+            const feedback = document.getElementById('feedback');
+            feedback.style.color = "#28a745";
+            feedback.innerText = completedCount === REQUIRED
+                ? "🎉 That is right — that's all 5! Press ENTER to keep practicing."
+                : "🎉 That is right! Press ENTER to go onto the next problem.";
+        }
+    }
+
+    function handleNetKeyDown(event) {
+        if (event.key === 'Enter' && isCompleted) {
+            renderProblem();
+        }
+    }
+
+    window.onload = function() {
+        updateTracker();
+        renderProblem();
+    };
+</script>
+
+</body>
+</html>
