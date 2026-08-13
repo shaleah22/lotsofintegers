@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -132,6 +133,13 @@
         margin-right: 0.22em;
     }
 
+    /* digits render as a group so columns can right-align them by place value */
+    .num {
+        display: inline-block;
+        font-variant-numeric: tabular-nums;
+        font-feature-settings: "tnum";
+    }
+
     .draggable-item.cancelled {
         opacity: 0.18;
         text-decoration: line-through;
@@ -192,6 +200,18 @@
     }
 
     .chart-column .draggable-item { font-size: var(--fit); }
+
+    /* place-value alignment: every tile in a column reserves the same number of
+       digit slots, so ones sit under ones, tens under tens */
+    .chart-column .num {
+        min-width: calc(var(--digits, 1) * 1ch);
+        text-align: right;
+    }
+
+    .chart-column .sgn {
+        width: 0.62em;
+        text-align: center;
+    }
 
     .chart-column.drag-over { background-color: #e6f2ff; }
 
@@ -484,6 +504,7 @@
     }
 
     function fitAll() {
+        alignPlaceValues();
         fitContainer(document.getElementById('pool'), 14);
         fitContainer(document.getElementById('col-plus'), 14);
         fitContainer(document.getElementById('col-minus'), 14);
@@ -867,12 +888,33 @@
 
     function fmt(str) {
         let out = '';
+        let digits = '';
+        const flush = () => {
+            if (digits) { out += `<span class="num">${digits}</span>`; digits = ''; }
+        };
         for (const ch of String(str)) {
+            if (ch >= '0' && ch <= '9') { digits += ch; continue; }
+            flush();
             if (ch === ' ') continue;
             if (ch === '+' || ch === '-') out += `<span class="sgn">${ch}</span>`;
             else out += ch;
         }
+        flush();
         return out;
+    }
+
+    /* Give each column enough digit slots for its widest number so the tiles
+       line up by place value. */
+    function alignPlaceValues() {
+        ['col-plus', 'col-minus'].forEach(id => {
+            const col = document.getElementById(id);
+            if (!col) return;
+            let widest = 1;
+            col.querySelectorAll('.draggable-item .num').forEach(n => {
+                widest = Math.max(widest, n.textContent.trim().length);
+            });
+            col.style.setProperty('--digits', widest);
+        });
     }
 
     function displayFor(item) {
